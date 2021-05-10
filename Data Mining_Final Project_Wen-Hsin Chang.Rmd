@@ -83,7 +83,7 @@ I conduct both visual analyses and supervised learning in this project. Firstly,
 
 ```{r, echo=FALSE, message = FALSE}
 #Audrey_new <- read_dta("C:/Users/user/Desktop/2021_ analyst project/Audrey_new.dta")
-Audrey_new <- read.csv("C:/Users/user/Desktop/Upload_Data Mining/Audrey_new.csv")
+Audrey_new <- read.csv("C:/Users/user/Desktop/CV_Data Mining/Audrey_new.csv")
 ```
 
 **3.1 Visual Analysis**
@@ -268,8 +268,6 @@ if (colMeans(predict_error_linear)<colMeans(predict_error_knn)&&colMeans(predict
 if(colMeans(predict_error_stepwise)<colMeans(predict_error_linear)&&colMeans(predict_error_stepwise)<colMeans(predict_error_knn)&&colMeans(predict_error_stepwise)<colMeans(predict_error_tree))sprintf("The model with lowest RMSE: %s  ","Stepwise Regression Model" )
 
 if(colMeans(predict_error_tree)<colMeans(predict_error_linear)&&colMeans(predict_error_tree)<colMeans(predict_error_knn)&&colMeans(predict_error_tree)<colMeans(predict_error_stepwise))sprintf("The model with lowest RMSE: %s " ,"Tree Model")
-
-
 
 
 
