@@ -1,0 +1,303 @@
+---
+title: "ECO395 Data Mining Final Project: Predicting analyst forecast accuracy under complex financial information."
+author: "Wen-Hsin(Molly) Chang"
+date: "2021/5/1"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+set.seed = 12345678
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message= FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+```{r, echo=FALSE, message = FALSE}
+library(haven)
+library(ggplot2)
+library(tidyverse)
+library(mosaic)
+library(dbplyr)
+library (readr)
+library(modelr)
+library(mosaic)
+library (readr)
+library(rsample)  # for creating train/test splits
+library(caret)
+library(installr)
+library(foreach)
+library(rpart)
+library(rpart.plot)
+library(tree)
+
+```
+
+
+**Abstract**
+
+Analyst’s earnings forecast has played an important role in the capital market since it facilitates investors’ judgments. As such, this project aims to examine how financial analyst’s forecast accuracy evolves under complex financial information (i.e., derivative instruments), and predict analyst’s forecast accuracy under various supervised learning methods. I identify US "derivative user" firms by conducting web-scraping and textual analysis on each firm’s annual report (10-K filings) through SEC’s EDGAR database. The results show that derivatives instruments diminish analyst's ability to forecast EPS. Moreover, after comparing the out-of-sample performance between KNN, tree model, stepwise regression model, and linear model, I find that the stepwise regression model performs the best for predicting analyst’s forecast accuracy in the face of derivative instruments. One possible explanation is probably due to the complex interactions between features. In the appendix, I establish a causal link between derivative instruments and analyst's forecast accuracy using a difference in difference method. 
+
+\newpage
+
+**1.0 Introduction: Background or motivation**
+
+Analyst’s earnings forecast has played an important role in the capital market since it facilitates investors’ judgment, which in turn improves market efficiencies. Financial analysts have long been regarded as financial experts who are less likely to misinterpret complex information in the financial market. However, prior studies suggest that analysts’ forecast uncertainty is associated with the amount and quality of a firm’s information (Atiase 1985; Barron and Stuerke 1998). As such, this project is motivated by how analyst’s earnings forecast accuracy evolves in the face of complex financial information in recent decades. Specifically, I focus on the financial reporting complexity caused by the emergence of derivative instruments (e.g., futures, options, swaps...etc.)
+
+According to the Bank for International Settlement, the total notional amount of global derivatives usage has increased by 700 percent in the past twenty years. However, derivatives are difficult to comprehend for several reasons. Firstly, derivatives can be linked to virtually any type of underlying asset or liabilities. Due to the complex structure, the derivative contract often involves meticulous designs and difficult valuation methods. Secondly, the intent behind holding derivatives may vary (i.e., hedging versus speculative) and thus entail elusiveness. If a firm employs derivatives for hedging purposes, the risk exposure of the firm decreases, while if a firm holds derivatives for speculating purposes, the risk exposure of the firm increases. Therefore, firms may exercise considerable judgment when reporting relevant financial information to the public.
+
+Chang et al. (2016) find that in the face of the complexity of derivatives, even sophisticated financial analysts routinely misjudge the earnings implications once a firm initializes a derivative program. Due to the complex nature of financial derivatives, the financial accounting standard board (FASB) has issued several accounting standards governing derivatives activities over the past few years, with the most recent one-SFAS No.161 in 2008. As derivatives have become more complex and pervasive, it is worthwhile to pay attention to the effect of derivatives on analyst forecast accuracy, and to predict analyst forecast accuracy under the influence of a firm’s engagement in derivative instruments.
+
+\newpage
+**2.0 Data and Research Methods**
+
+**2.1 Data**
+
+To obtain data regarding derivative usage, I conduct a textual analysis* on all the firm's annual reports (10-K filling) by scraping the SEC's EDGAR database. (*flagged all annual reports and search for specific terms: forward contract, option contract, futures contract, rate swap, swap agreement, currency exchange contract, foreign exchange contract, derivative instrument, and hedging instrument).I include U.S. sample for fiscal years 2004-2013, which is five years before and after the adoption of SFAS No.161 in November 2008. Samples are partitioned into either derivative USER or Non-USER. 
+
+Next, I merge the data above with firm's accounting variables from Compustat database, CEO option holdings from Execucomp database, and stock price information from CRSP database. After dropping observations without necessary data, the final sample consists of 5,820 firm-year observations, including 4,521 users and 1,299 non-user observations.
+
+**2.2 Research Methods**
+
+I conduct both visual analyses and supervised learning in this project. Firstly, in the visual analysis section, I provide several figures to illustrate (1) how derivatives usage affect analysts forecast accuracy, (2) how the US mandatory derivative disclosure requirements SFAS No.161 after 2009 improves analysts forecast accuracy, and (3) what’s the determinants of analysts forecast accuracy. Next, in the supervised learning sections, I try to predict analyst’s forecast accuracy using the following four methods: linear model, KNN model, Stepwise regression, and Tree model and determine which method performs the best in my research question. In the appendix, I conduct the standard difference-in-difference research design to validate the enhanced disclosure requirement of SFAS No.161 truly improves analyst’s forecast accuracy for firms that engage in derivatives activities.
+
+
+**2.3 Variable definitions**
+
+*AFACC*: Analyst's forecast accuracy, which is the accuracy of the last annual earnings forecast before earnings announcement date for year t. Calculated as the absolute value of forecast error multiplies -1000, scaled by the most recent stock price in the previous year. A larger AFACC implies more accurate forecasts.
+
+*SIZE*: Defined as the natural logarithm of total assets\newline
+
+*LEV*: Defined as total liabilities  divided by total assets at the beginning of the year\newline
+
+*MB*:	 Market to book ratio. Defined as market value divided by book ratio\newline
+
+*ROE*: Defined as income before extraordinary items scaled by lagged total equity\newline
+
+*FOLLOW*: Number of analysts following at the end of year t\newline
+
+*HORIZON*: Analyst forecast horizon\newline
+
+
+\newpage
+**3.0 Results**
+
+```{r, echo=FALSE, message = FALSE}
+#Audrey_new <- read_dta("C:/Users/user/Desktop/2021_ analyst project/Audrey_new.dta")
+Audrey_new <- read.csv("C:/Users/user/Desktop/Upload_Data Mining/Audrey_new.csv")
+```
+
+**3.1 Visual Analysis**
+
+Figure 1. shows that for firms with derivatives usages, analyst's forecast accuracy is lower compared to firms without derivatives usage. The result provides preliminary evidence that the complex nature of derivatives instruments diminishes analyst's ability to forecast EPS.
+
+```{r, echo=FALSE,message = FALSE}
+Audrey_new1=filter(Audrey_new,year<2009)
+Audrey_user =Audrey_new1 %>%group_by(user)%>%summarize(afacc=sum(afacc)/n())
+Audrey_user=Audrey_user%>%mutate(Derivative_User=(ifelse(user==1,'Y','N')))
+
+ggplot(data=Audrey_user)+geom_bar(mapping=aes(x=Derivative_User,y=afacc),fill="darkblue",stat='identity')+labs(title = "Figure.1 The effect of derivatives on AFACC")
+```
+
+\newpage
+To further validate the effect of derivatives, I examine the time-series trend of analyst's forecast accuracy before and after the US mandatory derivatives disclosures (SFAS No.161). Figure 2. indicates that after the adoption of SFAS No.161, analyst's forecast accuracy reverse from the downward trend and improved quite significantly.
+
+
+```{r, echo=FALSE, message = FALSE}
+Audrey1 =Audrey_new %>%group_by(year)%>%summarize(Avg.afacc=sum(afacc)/n())
+```
+
+```{r, echo=FALSE, message = FALSE}
+ggplot(Audrey1, aes(x = year, y = Avg.afacc)) + 
+    geom_point(shape = 21) + 
+    geom_vline(aes(xintercept = 2009), color = 'red', size = 1, linetype = 'dashed') + 
+    scale_color_brewer(NULL, type = 'qual', palette = 3) + 
+    geom_path(data = Audrey1, size = 0.5)+labs(title = "Figure.2 The effect of mandatory derivatives disclosures on AFACC")
+```
+
+\newpage
+Next, I examine other factors that may affect analysts forecast accuracy. Figure 3.indicates that the larger the firm is, the more accurate analysts will perform. This is quite intuitive since large firms will have more media coverage, and therefore more information available for analysts.
+
+```{r, echo=FALSE, message = FALSE}
+ggplot(data=Audrey_new)+geom_smooth(mapping=aes(x=size,y=afacc),color="darkred")+labs(title = "Figure.3 The effect of firm size on AFACC")
+```
+
+
+\newpage
+In Figure 4, I look at whether the number of analysts following (covering) is positively related to analyst's forecast accuracy. Prior studies suggest that firms with more analyst coverage are under pressure to release more transparent information during the conference call. Figure 4 supports such a notion.
+
+```{r, echo=FALSE,message = FALSE}
+ggplot(data=Audrey_new)+geom_smooth(mapping=aes(x=follow,y=afacc),color="darkred")+labs(title = "Figure 4.The effect of the number of analysts following on AFACC")
+```
+
+
+\newpage
+Finally, I provide a visual analysis on whether firm's return on equity (ROE) affects analyst's forecast accuracy. Figure 5 shows that the effect of ROE on forecast accuracy is not monotone. It decreases at first and bounces back after a certain threshold.
+
+```{r, echo=FALSE, warning=FALSE, message = FALSE}
+ggplot(data=Audrey_new)+geom_smooth(mapping=aes(x=roe,y=afacc),color="darkred")+labs(title = "Figure.5 The effect of ROE on AFACC")
+```
+
+\newpage
+**3.2 Prediction/Supervised learning** 
+
+After conducting visual analysis, I turn to supervised learning methods, aiming to predict analyst's forecast accuracy in the face of complex derivative instruments. First, I use a **forward stepwise regression** technique to get a better sense of which variable should be included in the model since I have numerous determinants. The stepwise regression result shows that the optimal combination is **"user + loss + horizon + follow + size + loss:follow + user:horizon + user:loss + loss:size + horizon:size + follow:size + horizon:follow + user:size"**, which is pretty much related to my findings in the previous visual analysis section.
+
+
+```{r, echo=FALSE, warnings=FALSE, message = FALSE}
+#Audrey_split=initial_split(Audrey,prop=0.8)
+#Audrey_train = training(Audrey_split)
+#Audrey_test = testing(Audrey_split)
+Audrey= na.omit(Audrey_new)
+null = lm(afacc ~ user, data=Audrey)
+#fwd = step(null, scope=~(user+size+follow+roe+mb+loss+ch+horrizon)^2, dir="forward")
+```
+
+Next, I turn to the tree model because there are several features in my dataset, and I suspect there are more interactions between the features that can't be solved using linear models. I plot my tree model below with cp=0.00015 and type=4.
+
+```{r, echo=FALSE, message = FALSE}
+library(maps)
+library(ggmap)
+library(rpart)
+library(rpart.plot)
+library(tree)
+Audrey_split=initial_split(Audrey,prop=0.8)
+Audrey_train = training(Audrey_split)
+Audrey_test = testing(Audrey_split)
+
+train_tree = rpart(afacc~user+size+follow+roe+mb+loss+horrizon, data=Audrey_train,
+                  control = rpart.control(cp = 0.0015))
+rpart.plot(train_tree , digits=-5, type=4, extra=1)
+
+```
+
+For comparison, I also run a KNN method to see if it perform better in my data set. After several runs of analysis, I choose k=100 in my KNN method.
+
+```{r, echo=FALSE, message = FALSE}
+
+y <- data.frame(K=rep(NA, 1),RMSE_out = rep(NA, 1))
+Audrey_split=initial_split(Audrey,prop=0.8)
+Audrey_train = training(Audrey_split)
+Audrey_test = testing(Audrey_split)
+  
+for(n in 1:200) {
+knn_model = knnreg(afacc ~ user+size+follow+roe+mb+loss+horrizon,data=Audrey_train ,k= n)
+y[n,2]=rmse(knn_model, Audrey_test)
+y[n,1]=n
+ }
+#ggplot(data=y)+geom_line(mapping=aes(x=K,y=RMSE_out),color="red")
+```
+
+Finally, I compare the out-of-sample performance of predicting analyst's forecast accuracy between linear model, KNN model, Stepwise model, and Tree model based on 30 folds cross validations. After multiple examinations, I find that the stepwise regression model seems to attain the lowest RMSE compared to all the other methods. In my opinion, the stepwise regression model is suitable in my setting because, as suggested by prior literature,  various features and interactions will determine analyst's forecast accuracy.
+
+
+
+```{r}
+# K-fold cross validation
+# allocate to folds
+N = nrow(Audrey)
+K = 30
+set.seed = 12345678
+fold_id = rep_len(1:K, N)  # repeats 1:K over and over again
+fold_id = sample(fold_id, replace=FALSE) # permute the order randomly
+
+
+predict_save_linear = matrix(0, nrow=K)
+predict_error_linear = matrix(0, nrow=K)
+
+
+predict_save_knn = matrix(0, nrow=K)
+predict_error_knn = matrix(0, nrow=K)
+
+
+
+predict_save_stepwise = matrix(0, nrow=K)
+predict_error_stepwise = matrix(0, nrow=K)
+
+
+predict_save_tree = matrix(0, nrow=K)
+predict_error_tree = matrix(0, nrow=K)
+
+for(i in 1:30) {
+  train_set = which(fold_id != i)
+   y_test = Audrey$afacc[-train_set]
+  
+    this_model_linear = lm(afacc ~ user+size+follow+roe+mb+loss+horrizon , data=Audrey[train_set,])
+    
+    yhat_test_linear = predict(this_model_linear, newdata=Audrey[-train_set,])
+    
+    predict_save_linear[i] = sum(yhat_test_linear)
+    predict_error_linear[i] = mean((y_test - yhat_test_linear)^2)
+
+    
+    
+    this_model_knn = knnreg(afacc ~ user+size+follow+roe+mb+loss+horrizon, data=Audrey[train_set,],k=100)
+    yhat_test_knn = predict(this_model_knn, newdata=Audrey[-train_set,])
+    
+    predict_save_knn[i] = sum(yhat_test_knn)
+    predict_error_knn[i] = mean((y_test- yhat_test_knn)^2)
+    
+    
+    
+       this_model_stepwise = lm(afacc ~ user + loss + horrizon + follow + size + loss:follow + user:horrizon + user:loss + loss:size + horrizon:size + follow:size + horrizon:follow + user:size, data=Audrey[train_set,])
+    yhat_test_stepwise = predict(this_model_stepwise, newdata=Audrey[-train_set,])
+    
+    predict_save_stepwise[i] = sum(yhat_test_stepwise)
+    predict_error_stepwise[i] = mean((y_test- yhat_test_stepwise)^2)
+    
+    
+    
+    this_model_tree =  rpart(afacc~user+size+follow+roe+mb+loss+horrizon,
+                  control = rpart.control(cp = 0.0015),data=Audrey[train_set,])
+    yhat_test_tree = predict(this_model_tree, newdata=Audrey[-train_set,])
+    
+    predict_save_tree[i] = sum(yhat_test_tree)
+    predict_error_tree[i] = mean((y_test- yhat_test_tree)^2)
+      
+}
+
+#colMeans(predict_error_linear)
+#colMeans(predict_error_knn)
+#colMeans(predict_error_stepwise)
+#colMeans(predict_error_tree)
+
+
+
+if (colMeans(predict_error_linear)<colMeans(predict_error_knn)&&colMeans(predict_error_linear)<colMeans(predict_error_stepwise)&&colMeans(predict_error_linear)<colMeans(predict_error_tree))sprintf("The model with lowest RMSE: %s" ,"Linear Model")
+                                                                                                 if(colMeans(predict_error_knn)<colMeans(predict_error_linear)&&colMeans(predict_error_knn)<colMeans(predict_error_stepwise)&&colMeans(predict_error_knn)<colMeans(predict_error_tree))sprintf("The model with lowest RMSE: %s" ,"KNN Model")
+
+if(colMeans(predict_error_stepwise)<colMeans(predict_error_linear)&&colMeans(predict_error_stepwise)<colMeans(predict_error_knn)&&colMeans(predict_error_stepwise)<colMeans(predict_error_tree))sprintf("The model with lowest RMSE: %s  ","Stepwise Regression Model" )
+
+if(colMeans(predict_error_tree)<colMeans(predict_error_linear)&&colMeans(predict_error_tree)<colMeans(predict_error_knn)&&colMeans(predict_error_tree)<colMeans(predict_error_stepwise))sprintf("The model with lowest RMSE: %s " ,"Tree Model")
+
+
+
+
+
+```
+
+
+\newpage
+
+**4.0 Conclusion**
+
+This project aims to examine how financial analyst’s forecast accuracy evolves under complex financial information (i.e., derivative instruments), and predict analyst’s forecast accuracy under various supervised learning methods. I identify US derivative user firms by conducting web-scraping and textual analysis on each firm’s annual report (10-K filings) through SEC’s EDGAR database. The results show that derivatives instruments diminish analyst's ability to forecast EPS. Moreover, after comparing the out-of-sample performance between KNN, tree model, stepwise model, and linear model, I find that the stepwise regression model performs the best for predicting analyst’s forecast accuracy in the face of derivative instruments. One possible explanation is probably due to the complex interactions between features.  
+
+\newpage
+
+**5.0 Appendix.Establish a causal link using Difference-in-Difference method**
+
+In the appendix, I  establish a causal link between derivative instruments and analyst's forecast accuracy using a difference in difference method. The FASB's mandatory derivatives disclosures (SFAS No.161) in the US serves as an exogenous shock to the derivative users, which can be considered as the treatment group. The result below shows that the coefficient of the interaction term "post x treat" is extremely significant, indicating that the improvement of derivative disclosure truly affects analyst's forecast accuracy, and thus we should indeed take derivative usage into account when predicting analyst's forecast accuracy.
+
+```{r, echo=FALSE, message = FALSE}
+Audrey_new <- read_dta("C:/Users/user/Desktop/2021_ analyst project/Audrey_new.dta")
+lm_final = lm(afacc~user+post+post_treat+size+loss+roa+roe+mb+altz ,data=Audrey_new)
+summary(lm_final)
+```
+
+
+**Reference**
+
+Atiase, R. 1985. Predisclosure information, firm capitalization, and security price behavior around earnings announcements. Journal of Accounting Research 23(1): 21–36.\newline
+Barron, O. E., and P. S. Stuerke. 1998. Dispersion in analysts’ earnings forecasts as a measure of uncertainty. Journal of Accounting, Auditing and Finance 13 (Summer): 245–270.\newline
+Chang, H., M. Donohoe, and T. Sougianis. 2016. Do analysts understand the economic and reporting complexities of derivatives? Journal of Accounting and Economics 61(2-3): 584-604.
+
